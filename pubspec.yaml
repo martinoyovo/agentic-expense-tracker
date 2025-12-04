@@ -1,0 +1,41 @@
+name: expense_tracker_genui
+description: A Flutter expense tracker demo with GenUI and Firebase AI integration
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_ai: ^3.6.0
+  firebase_core: ^4.2.1
+
+  # GenUI
+  genui: ^0.5.1
+  genui_firebase_ai: ^0.5.1
+  json_schema_builder: ^0.1.3
+
+  # Charts
+  fl_chart: ^1.1.1
+
+  # Image handling
+  image_picker: ^1.2.1
+
+  # Audio
+  record: ^6.0.0
+  flutter_soloud: ^3.1.3
+
+  # Utils
+  intl: ^0.20.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
