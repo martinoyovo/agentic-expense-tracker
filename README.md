@@ -419,8 +419,6 @@ class AudioService extends ChangeNotifier {
 }
 ```
 
----
-
 ## Custom Chatbot Implementation
 
 ### Why Custom Instead of flutter_ai_toolkit?
