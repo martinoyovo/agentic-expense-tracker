@@ -1,4 +1,4 @@
-# 🎤 Building AI-Powered Dynamic UIs with Flutter, GenUI & Firebase
+# Building AI-Powered Dynamic UIs with Flutter, GenUI & Firebase
 
 > **Techsgiving Demo** — A comprehensive showcase of agentic AI capabilities in Flutter
 
@@ -7,9 +7,7 @@
 [![GenUI](https://img.shields.io/badge/GenUI-0.5.1-purple)](https://pub.dev/packages/genui)
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Web%20%7C%20Desktop-blue)]()
 
----
-
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Overview](#-overview)
 2. [Key Innovations](#-key-innovations)
@@ -22,12 +20,9 @@
 9. [Surface Management](#-surface-management)
 10. [Performance Optimizations](#-performance-optimizations)
 11. [Getting Started](#-getting-started)
-12. [Demo Script](#-demo-script)
-13. [Key Takeaways](#-key-takeaways)
+12. [Key Takeaways](#-key-takeaways)
 
----
-
-## 🌟 Overview
+## Overview
 
 This project demonstrates the future of AI-powered Flutter applications by combining:
 
@@ -51,9 +46,7 @@ AI:   [Creates Food & Drink category] → [Shows confirmation dialog] → [Adds 
 
 **No hardcoded UI for data display** — the AI decides what widgets to show and where.
 
----
-
-## 🚀 Key Innovations
+## Key Innovations
 
 ### 1. Agentic UI Generation
 The AI doesn't just respond with text — it **takes actions** and **modifies the UI**:
@@ -100,9 +93,7 @@ LiveChatService get liveChatService {
 }
 ```
 
----
-
-## 🎬 Live Demo
+## Live Demo
 
 ### Quick Start Commands
 
@@ -131,9 +122,7 @@ flutter run              # Mobile
 | 7 | "Beach vibes background" | Updates background imagery |
 | 8 | 🎙️ *Voice:* "Coffee ten dollars" | Voice input → Processing → Audio response |
 
----
-
-## 🏗️ Architecture Deep Dive
+## Architecture Deep Dive
 
 ### Project Structure
 
@@ -234,9 +223,7 @@ lib/
 └─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## 🎨 GenUI: Dynamic UI Generation
+## GenUI: Dynamic UI Generation
 
 ### What is GenUI?
 
@@ -295,7 +282,7 @@ final categoryColumnItem = CatalogItem(
 
 ---
 
-## 🔧 AI Tool Calling
+## AI Tool Calling
 
 ### How It Works
 
@@ -364,7 +351,7 @@ Surface updated → UI re-renders
 
 ---
 
-## 🎙️ Voice Chat with Gemini Live API
+## Voice Chat with Gemini Live API
 
 ### Real-Time Audio Processing
 
@@ -434,7 +421,7 @@ class AudioService extends ChangeNotifier {
 
 ---
 
-## 💬 Custom Chatbot Implementation
+## Custom Chatbot Implementation
 
 ### Why Custom Instead of flutter_ai_toolkit?
 
@@ -507,9 +494,7 @@ class _ChatViewState extends State<ChatView> {
 }
 ```
 
----
-
-## 📍 Surface Management
+## Surface Management
 
 ### Concept
 
@@ -606,9 +591,7 @@ Widget build(BuildContext context) {
 }
 ```
 
----
-
-## ⚡ Performance Optimizations
+## Performance Optimizations
 
 ### 1. Lazy Service Initialization
 
@@ -667,9 +650,7 @@ void main() {
 }
 ```
 
----
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -703,60 +684,7 @@ Add to `macos/Runner/DebugProfile.entitlements` and `Release.entitlements`:
 <true/>
 ```
 
----
-
-## 🎭 Demo Script
-
-### Opening (30 seconds)
-
-> "Today I'm showing how AI can generate entire Flutter UIs through conversation.
-> No hardcoded layouts — everything you see is created by Gemini."
-
-### Part 1: Basic Expense Tracking (2 minutes)
-
-```
-1. "Add coffee $5"
-   → Watch: Category created, dialog appears, expense added
-   
-2. "Add lunch $15"  
-   → Watch: Goes to same category automatically
-   
-3. "Add Uber $23 under Travel"
-   → Watch: New Travel category created
-```
-
-### Part 2: Visual Customization (1 minute)
-
-```
-4. "Change Travel to purple"
-   → Watch: Column color updates
-   
-5. "Show me a pie chart"
-   → Watch: Chart appears
-   
-6. "Make it a bar chart"
-   → Watch: Visualization swaps
-```
-
-### Part 3: Voice Mode (1 minute)
-
-```
-7. Click microphone icon
-   → Watch: Voice UI appears
-   
-8. "Add dinner twenty dollars"
-   → Watch: Voice processing, audio response, UI updates
-```
-
-### Closing (30 seconds)
-
-> "The key insight: AI isn't just answering questions — it's an agent 
-> that modifies app state through function calling and generates UI
-> through structured data. This is the future of adaptive interfaces."
-
----
-
-## 🎯 Key Takeaways
+## Key Takeaways
 
 ### For Your Next Project
 
@@ -790,9 +718,7 @@ Add to `macos/Runner/DebugProfile.entitlements` and `Release.entitlements`:
 | Platform permissions | Built-in package handling |
 | UI state sync | Global service references + NotifyListeners |
 
----
-
-## 📦 Dependencies
+## Dependencies
 
 ```yaml
 dependencies:
@@ -819,7 +745,7 @@ dependencies:
 
 ---
 
-## 🔗 Resources
+## Resources
 
 - [GenUI Package](https://pub.dev/packages/genui)
 - [Firebase AI Documentation](https://firebase.google.com/docs/vertex-ai)
@@ -828,7 +754,7 @@ dependencies:
 
 ---
 
-## 📄 License
+## License
 
 MIT License — Feel free to use for learning and inspiration!
 
