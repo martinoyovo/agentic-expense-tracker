@@ -7,6 +7,8 @@
 [![GenUI](https://img.shields.io/badge/GenUI-0.5.1-purple)](https://pub.dev/packages/genui)
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android%20%7C%20Web%20%7C%20Desktop-blue)]()
 
+![Demo](demo.gif)
+
 ## Table of Contents
 
 1. [Overview](#-overview)
