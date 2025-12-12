@@ -12,7 +12,7 @@ final expenseCardItem = CatalogItem(
       'date': S.string(description: 'ISO 8601 date string when the expense occurred (ALWAYS include)'),
     },
     required: ['id', 'title', 'amount', 'date'],
-  ),
+    ),
   widgetBuilder: (context) {
     final data = context.data as Map<String, dynamic>;
     return ExpenseCardWidget(

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:genui/genui.dart';
 import 'package:genui_firebase_ai/genui_firebase_ai.dart';
 import 'package:json_schema_builder/json_schema_builder.dart' as dsb;
+import 'package:firebase_ai/firebase_ai.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 import 'features/expenses/services/expense_service.dart';
@@ -13,6 +14,13 @@ import 'features/chat/services/audio_service.dart';
 import 'genui/catalog/catalog_items.dart';
 import 'genui/surfaces/surface_manager.dart';
 import 'screens/home_screen.dart';
+
+// #region agent log
+void _debugLog(String location, String message, Map<String, dynamic> data,
+    String hypothesisId) {
+  debugPrint('🔍 [$hypothesisId] $location: $message | $data');
+}
+// #endregion
 
 class ExpenseTrackerApp extends StatefulWidget {
   const ExpenseTrackerApp({super.key});
@@ -103,9 +111,60 @@ class _ExpenseTrackerAppState extends State<ExpenseTrackerApp> {
     // This significantly improves app startup time
   }
 
+  /// Convert DynamicAiTool to Firebase AI Tool format
+  List<Tool> _convertToolsToFirebaseAI(List<AiTool> tools) {
+    return tools.map((tool) {
+      if (tool is DynamicAiTool) {
+        // Convert json_schema_builder schema to Firebase AI Schema
+        final schema = tool.parameters;
+        final properties = <String, Schema>{};
+
+        if (schema is dsb.ObjectSchema && schema.properties != null) {
+          for (final entry in schema.properties!.entries) {
+            final propSchema = entry.value;
+            SchemaType? type;
+            if (propSchema is dsb.StringSchema) {
+              type = SchemaType.string;
+            } else if (propSchema is dsb.NumberSchema) {
+              type = SchemaType.number;
+            } else if (propSchema is dsb.IntegerSchema) {
+              type = SchemaType.integer;
+            } else if (propSchema is dsb.BooleanSchema) {
+              type = SchemaType.boolean;
+            }
+
+            if (type != null) {
+              properties[entry.key] = Schema(
+                type,
+                description: propSchema.description,
+              );
+            }
+          }
+        }
+
+        return Tool.functionDeclarations([
+          FunctionDeclaration(
+            tool.name,
+            tool.description,
+            parameters: properties,
+          ),
+        ]);
+      }
+      throw UnsupportedError('Tool type not supported: ${tool.runtimeType}');
+    }).toList();
+  }
+
   /// Lazy getter for LiveChatService - only created when needed
   LiveChatService get liveChatService {
-    _liveChatService ??= LiveChatService();
+    if (_liveChatService == null) {
+      _liveChatService = LiveChatService();
+      // Initialize with tools - convert to Firebase AI format
+      final expenseTools = _createExpenseTools();
+      final backgroundTools = _createBackgroundTools();
+      final allTools = [...expenseTools, ...backgroundTools];
+      final firebaseTools = _convertToolsToFirebaseAI(allTools);
+      _liveChatService!.setTools(allTools, firebaseTools);
+    }
     return _liveChatService!;
   }
 
@@ -127,48 +186,123 @@ Your capabilities:
 5. Show totals: Display total expenses with labels
 6. Change backgrounds: Generate themed backgrounds
 
-UI Surfaces:
-- background: Full-screen background image
-- chart: Single chart slot (pie, bar, or line)
-- total: Total widget showing sum with label
-- categories: Kanban columns for expense categories
-- dialog: Confirmation dialogs for text mode
+UI Surfaces (use these surface IDs with surfaceUpdate and beginRendering):
+- "background": Full-screen background image
+- "chart": Single chart slot (pie, bar, or line)
+- "total": Total widget showing sum with label
+- "categories": Kanban columns for expense categories
+- "dialog": Confirmation dialogs
 
-Rules:
-- For TEXT mode: Always show a ConfirmationDialog before adding expenses or making changes
-- For VOICE mode: Perform actions immediately and confirm verbally
-- Only show ONE chart at a time in the chart slot
-- Automatically create categories if they don't exist
-- Use 10% opacity background tint for category columns
-- When switching chart types, use the same data but different visualization
+HOW TO UPDATE UI SURFACES:
+You MUST use the surfaceUpdate tool followed by beginRendering to display widgets.
+
+Step 1: Call surfaceUpdate with:
+  - surfaceId: the surface name (e.g., "categories")
+  - components: array of component objects, each with:
+    - id: unique string ID for this component
+    - component: object with "name" and "data" fields
+
+Step 2: Call beginRendering with:
+  - surfaceId: same surface name
+  - root: the ID of the root component to display
+
+ADDING EXPENSES - COMPLETE WORKFLOW:
+
+When user requests to add an expense (like "coffee \$5"):
+
+1. Check if category exists: findCategoryByName("Food & Drink")
+2. If not found, create it: addCategory("Food & Drink", "#4CAF50")
+3. Add the expense ONCE: addExpense("coffee", 5.0, categoryId)
+   ⚠️ CRITICAL: Call addExpense ONLY ONCE per expense. Do NOT call it multiple times.
+
+The addExpense tool returns allCategories with ALL data. Use it to update the UI:
+
+4. Call getAllExpenses to get ALL current categories and expenses
+5. Call surfaceUpdate for "categories" surface with CategoriesContainer component:
+   surfaceUpdate({
+     surfaceId: "categories",
+     components: [
+       {
+         id: "categories_root",
+         component: {
+           name: "CategoriesContainer",
+           data: {
+             categories: [
+               {
+                 id: "123",
+                 name: "Food & Drink",
+                 color: "#4CAF50",
+                 expenses: [{id: "e1", title: "coffee", amount: 5, date: "2024-12-11T10:00:00Z"}]
+               },
+               {
+                 id: "456",
+                 name: "Travel",
+                 color: "#2196F3",
+                 expenses: [{id: "e2", title: "uber", amount: 15, date: "2024-12-11T11:00:00Z"}]
+               }
+             ]
+           }
+         }
+       }
+     ]
+   })
+
+6. Call beginRendering:
+   beginRendering({ surfaceId: "categories", root: "categories_root" })
+
+7. Respond: "Added coffee for \$5 to Food & Drink."
+
+CRITICAL RULES FOR CATEGORIES SURFACE:
+- ALWAYS call getAllExpenses first to get ALL current categories and expenses
+- ALWAYS use CategoriesContainer as the root component (not individual CategoryColumn components)
+- ALWAYS include ALL categories in the categories array, not just the new one
+- When showing charts or all expenses, ALWAYS update the categories surface with ALL categories
 
 Category Management:
+- When adding to existing category: Use the existing categoryId
+- When category doesn't exist: Create it first with addCategory, then add expense
 - Infer category from context (e.g., "coffee" → "Food & Drink", "uber" → "Travel")
 - Default categories: Food & Drink, Travel, Work, Entertainment, Shopping, Health, Other
-- Create new categories when explicitly requested
 
-Example Interactions:
-- "Add coffee \$5" → Create expense in Food & Drink category
-- "Show me a pie chart" → Display CategoryColumn data as pie chart
-- "Change Travel to purple" → Update Travel category color to purple
-- "Show total this week" → Display TotalWidget with current sum and "this week" label
-- "Beach background" → Generate beach-themed background image
+UI Update Rules:
+- Only show ONE chart at a time in the chart slot
+- Use 10% opacity background tint for category columns
+- ALWAYS include the 'date' field for every expense
+- For categories surface: ALWAYS use CategoriesContainer with ALL categories, never individual CategoryColumn components
+- When updating categories surface, ALWAYS include ALL existing categories, not just new ones
+- Each expense needs: id, title, amount, date (ISO 8601 string)
 
-Always be helpful, conversational, and efficient!
+CHART DATA CREATION:
+When creating charts (pie, bar, or line):
+1. Call getAllExpenses to get ALL categories and their expenses
+2. For EACH category, calculate the TOTAL amount (sum all expenses in that category)
+3. Create ONE data point per category with:
+   - label: category name (e.g., "Food & Drink")
+   - value: total amount for that category (sum of all expenses)
+   - color: category color
+4. IMPORTANT: Create exactly ONE data point per category - do NOT create multiple points for the same category
+5. Example: If you have "Food & Drink" with expenses [\$5, \$10, \$3], create ONE point with label: "Food & Drink", value: 18, color: "#4CAF50"
 
-CRITICAL WORKFLOW:
-1. When user confirms an action (clicks "Yes"), call the appropriate tool (addExpense, addCategory, etc.)
-2. IMMEDIATELY after calling addExpense or addCategory, you MUST call getAllExpenses to get the updated data
-3. Then update the UI surfaces (especially the "categories" surface) with CategoryColumn widgets showing the updated expense data from getAllExpenses
-4. Each CategoryColumn must include ALL expenses for that category from the getAllExpenses result
-5. ALWAYS include the 'date' field for every expense - dates are displayed on expense cards
-
-Example: After addExpense succeeds, call getAllExpenses, then update the "categories" surface with CategoryColumn widgets containing the complete expense lists including dates.
+Example chart data structure (for surfaceUpdate):
+- chartType: "line"
+- data: array with ONE object per category
+- Each data object: label (category name), value (total amount), color (category color)
 
 Background Management:
-- When user requests a background change, call generateBackground tool
-- After generateBackground succeeds, update the "background" surface with a BackgroundImage widget
-- BackgroundImage widget requires: imageUrl (string) and description (string)
+- Call generateBackground tool first
+- The generateBackground tool returns hasImage: true/false and a description
+- When creating BackgroundImage widget:
+  - If hasImage is true: use imageUrl: "generated" (the widget will load the image from the service)
+  - If hasImage is false: use imageUrl: null (will show gradient)
+- DO NOT pass full base64 image strings - use "generated" flag instead
+- Then surfaceUpdate with BackgroundImage component:
+  {
+    imageUrl: "generated",  // Use "generated" if image was created, null otherwise
+    description: "beach theme"  // The description from generateBackground
+  }
+- Then beginRendering with the component ID
+
+Always be helpful, conversational, and efficient!
 ''';
   }
 
@@ -177,7 +311,7 @@ Background Management:
       DynamicAiTool<JsonMap>(
         name: 'addExpense',
         description:
-            'Adds a new expense to a category. Use this when the user confirms adding an expense. CRITICAL: After calling this tool, you MUST immediately call getAllExpenses, then update the "categories" surface with CategoryColumn widgets containing ALL expenses from getAllExpenses result.',
+            'Adds a new expense to a category. This tool automatically returns ALL categories with ALL their expenses so you can immediately update the UI. Use the returned data to create CategoryColumn widgets on the "categories" surface.',
         parameters: dsb.S.object(
           properties: {
             'title': dsb.S
@@ -190,6 +324,20 @@ Background Management:
           required: ['title', 'amount', 'categoryId'],
         ),
         invokeFunction: (args) async {
+          // #region agent log
+          _debugLog(
+              'app.dart:addExpense',
+              'addExpense TOOL CALLED',
+              {
+                'title': args['title'],
+                'amount': args['amount'],
+                'categoryId': args['categoryId'],
+                'existingExpenseCount':
+                    globalExpenseService?.expenses.length ?? 0,
+              },
+              'A,B');
+          // #endregion
+
           final expenseService = globalExpenseService;
           if (expenseService == null) {
             return {'error': 'ExpenseService not available'};
@@ -201,19 +349,45 @@ Background Management:
 
           final expense = expenseService.addExpense(title, amount, categoryId);
 
-          // Get updated category info
-          final category = expenseService.categories.firstWhere(
-            (c) => c.id == categoryId,
-            orElse: () => throw Exception('Category not found'),
-          );
+          // #region agent log
+          _debugLog(
+              'app.dart:addExpense:after',
+              'addExpense completed',
+              {
+                'expenseId': expense.id,
+                'totalExpensesNow': expenseService.expenses.length,
+              },
+              'A,B');
+          // #endregion
+
+          // Automatically get ALL categories and expenses to return
+          final categories = expenseService.categories;
+          final expenses = expenseService.expenses;
+
+          final allCategoriesData = categories
+              .map((cat) => {
+                    'id': cat.id,
+                    'name': cat.name,
+                    'color': _colorToHex(cat.color),
+                    'expenses': expenses
+                        .where((e) => e.categoryId == cat.id)
+                        .map((e) => {
+                              'id': e.id,
+                              'title': e.title,
+                              'amount': e.amount,
+                              'date': e.date.toIso8601String(),
+                            })
+                        .toList(),
+                  })
+              .toList();
 
           return {
             'success': true,
             'expenseId': expense.id,
-            'categoryId': categoryId,
-            'categoryName': category.name,
+            'allCategories': allCategoriesData,
+            'total': expenseService.totalExpenses,
             'message':
-                'Expense added successfully. You MUST now call getAllExpenses and update the UI surfaces.',
+                'Expense added. Use the allCategories data to create CategoryColumn widgets for EVERY category.',
           };
         },
       ),
@@ -233,6 +407,19 @@ Background Management:
           required: ['name', 'color'],
         ),
         invokeFunction: (args) async {
+          // #region agent log
+          _debugLog(
+              'app.dart:addCategory',
+              'addCategory TOOL CALLED',
+              {
+                'name': args['name'],
+                'color': args['color'],
+                'existingCategoryCount':
+                    globalExpenseService?.categories.length ?? 0,
+              },
+              'A,B');
+          // #endregion
+
           final expenseService = globalExpenseService;
           if (expenseService == null) {
             return {'error': 'ExpenseService not available'};
@@ -242,6 +429,17 @@ Background Management:
           final color = args['color'] as String;
 
           final category = expenseService.addCategory(name, color);
+
+          // #region agent log
+          _debugLog(
+              'app.dart:addCategory:after',
+              'addCategory completed',
+              {
+                'categoryId': category.id,
+                'totalCategoriesNow': expenseService.categories.length,
+              },
+              'A,B');
+          // #endregion
 
           return {
             'success': true,
@@ -384,20 +582,23 @@ Background Management:
           final prompt = args['prompt'] as String;
           await imagenService.generateBackground(prompt);
 
-          // Note: Since actual image generation isn't implemented, we'll return null for imageUrl
-          // This will make BackgroundImageWidget show a gradient based on the description
-          // In a real app, you'd get the actual image URL from the Imagen API
-          final description = imagenService.currentDescription ?? prompt;
+          // Gemini has generated an enhanced prompt for image generation
+          // In production, this would call Imagen API with the Gemini-generated prompt
+          // For now, we return null to show themed gradients based on the description
 
-          // For now, return null imageUrl so the widget shows a gradient
-          // GenUI should still update the background surface with the description
+          final description = imagenService.currentDescription ?? prompt;
+          final hasImage = imagenService.currentBackgroundUrl != null;
 
           return {
             'success': true,
-            'imageUrl': null, // Will show gradient fallback
+            'hasImage': hasImage, // Boolean flag instead of full base64 string
             'description': description,
-            'message':
-                'Background generated. You MUST now update the "background" surface with a BackgroundImage widget containing imageUrl: null and description: "$description".',
+            'message': hasImage
+                ? 'Background image generated successfully using Gemini AI and ImageGen! '
+                    'You MUST now update the "background" surface with a BackgroundImage widget containing imageUrl: "generated" and description: "$description". '
+                    'The widget will automatically load the generated image from the service.'
+                : 'Background prompt generated using Gemini AI. Image generation is pending or failed. '
+                    'You MUST now update the "background" surface with a BackgroundImage widget containing imageUrl: null and description: "$description".',
           };
         },
       ),
@@ -414,7 +615,54 @@ Background Management:
     final surfaceId = update.surfaceId;
     final definition = update.definition;
 
+    // #region agent log
+    _debugLog(
+        'app.dart:_handleSurfaceAdded',
+        'Surface ADDED callback triggered',
+        {
+          'surfaceId': surfaceId,
+          'rootComponentId': definition.rootComponentId,
+          'categoryWidgetsBefore': _surfaceManager.categoryWidgets.length,
+        },
+        'A,D');
+    // #endregion
+
     setState(() {
+      // Handle categories surface - now uses CategoriesContainer widget
+      if (surfaceId == AppConstants.surfaceCategories) {
+        // #region agent log
+        _debugLog(
+            'app.dart:_handleSurfaceAdded:categories',
+            'Adding categories surface with CategoriesContainer',
+            {
+              'surfaceId': surfaceId,
+              'hasRootComponent': definition.rootComponentId != null,
+            },
+            'D,E');
+        // #endregion
+        // Clear existing categories and set the new container
+        if (definition.rootComponentId != null) {
+          _surfaceManager.clearCategories();
+          _surfaceManager.setCategorySurface(
+            surfaceId,
+            GenUiSurface(
+              host: _genUiManager,
+              surfaceId: surfaceId,
+            ),
+          );
+        }
+        // #region agent log
+        _debugLog(
+            'app.dart:_handleSurfaceAdded:categories:after',
+            'After add categories',
+            {
+              'categoryWidgetsAfter': _surfaceManager.categoryWidgets.length,
+            },
+            'D,E');
+        // #endregion
+        return;
+      }
+
       switch (surfaceId) {
         case AppConstants.surfaceBackground:
           _surfaceManager.setBackground(
@@ -440,20 +688,16 @@ Background Management:
             ),
           );
           break;
-        case AppConstants.surfaceCategories:
-          // Clear existing categories first to prevent duplicates
-          _surfaceManager.clearCategories();
-          // Then add the new category
-          if (definition.rootComponentId != null) {
-            _surfaceManager.addCategory(
-              GenUiSurface(
-                host: _genUiManager,
-                surfaceId: surfaceId,
-              ),
-            );
-          }
-          break;
         case AppConstants.surfaceDialog:
+          // #region agent log
+          _debugLog(
+              'app.dart:_handleSurfaceAdded:dialog',
+              'Dialog surface ADDED',
+              {
+                'surfaceId': surfaceId,
+              },
+              'A');
+          // #endregion
           _surfaceManager.setDialog(
             GenUiSurface(
               host: _genUiManager,
@@ -469,7 +713,53 @@ Background Management:
     final surfaceId = update.surfaceId;
     final definition = update.definition;
 
+    // #region agent log
+    _debugLog(
+        'app.dart:_handleSurfaceUpdated',
+        'Surface UPDATED callback triggered',
+        {
+          'surfaceId': surfaceId,
+          'rootComponentId': definition.rootComponentId,
+          'categoryWidgetsBefore': _surfaceManager.categoryWidgets.length,
+        },
+        'A,D');
+    // #endregion
+
     setState(() {
+      // Handle categories surface - now uses CategoriesContainer widget
+      if (surfaceId == AppConstants.surfaceCategories) {
+        // #region agent log
+        _debugLog(
+            'app.dart:_handleSurfaceUpdated:categories',
+            'Updating categories surface with CategoriesContainer',
+            {
+              'surfaceId': surfaceId,
+              'hasRootComponent': definition.rootComponentId != null,
+            },
+            'D,E');
+        // #endregion
+        // Update the categories surface (CategoriesContainer includes all categories)
+        if (definition.rootComponentId != null) {
+          _surfaceManager.setCategorySurface(
+            surfaceId,
+            GenUiSurface(
+              host: _genUiManager,
+              surfaceId: surfaceId,
+            ),
+          );
+        }
+        // #region agent log
+        _debugLog(
+            'app.dart:_handleSurfaceUpdated:categories:after',
+            'After update categories',
+            {
+              'categoryWidgetsAfter': _surfaceManager.categoryWidgets.length,
+            },
+            'D,E');
+        // #endregion
+        return;
+      }
+
       switch (surfaceId) {
         case AppConstants.surfaceBackground:
           _surfaceManager.setBackground(
@@ -495,19 +785,16 @@ Background Management:
             ),
           );
           break;
-        case AppConstants.surfaceCategories:
-          // Update categories - rebuild all
-          _surfaceManager.clearCategories();
-          if (definition.rootComponentId != null) {
-            _surfaceManager.addCategory(
-              GenUiSurface(
-                host: _genUiManager,
-                surfaceId: surfaceId,
-              ),
-            );
-          }
-          break;
         case AppConstants.surfaceDialog:
+          // #region agent log
+          _debugLog(
+              'app.dart:_handleSurfaceUpdated:dialog',
+              'Dialog surface UPDATED',
+              {
+                'surfaceId': surfaceId,
+              },
+              'A');
+          // #endregion
           _surfaceManager.setDialog(
             GenUiSurface(
               host: _genUiManager,
@@ -523,6 +810,12 @@ Background Management:
     final surfaceId = update.surfaceId;
 
     setState(() {
+      // Check if this is the categories surface
+      if (surfaceId == AppConstants.surfaceCategories) {
+        _surfaceManager.clearCategories();
+        return;
+      }
+
       switch (surfaceId) {
         case AppConstants.surfaceBackground:
           _surfaceManager.setBackground(null);
@@ -532,9 +825,6 @@ Background Management:
           break;
         case AppConstants.surfaceTotal:
           _surfaceManager.setTotal(null);
-          break;
-        case AppConstants.surfaceCategories:
-          _surfaceManager.clearCategories();
           break;
         case AppConstants.surfaceDialog:
           _surfaceManager.clearDialog();

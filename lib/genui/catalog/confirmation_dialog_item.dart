@@ -1,9 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:genui/genui.dart';
 import 'package:json_schema_builder/json_schema_builder.dart';
 import '../../core/constants/app_constants.dart';
 import '../../app.dart';
+
+// #region agent log
+void _debugLogDialog(String location, String message, Map<String, dynamic> data,
+    String hypothesisId) {
+  debugPrint('🔍 [$hypothesisId] $location: $message | $data');
+}
+// #endregion
 
 final confirmationDialogItem = CatalogItem(
   name: 'ConfirmationDialog',
@@ -50,6 +58,16 @@ final confirmationDialogItem = CatalogItem(
               children: [
                 TextButton(
                   onPressed: () {
+                    // #region agent log
+                    _debugLogDialog(
+                        'confirmation_dialog:onNo',
+                        'User clicked NO button',
+                        {
+                          'message': message,
+                          'conversationExists': globalGenUiConversation != null,
+                        },
+                        'B');
+                    // #endregion
                     // Send "No" response back to GenUI conversation
                     final conversation = globalGenUiConversation;
                     if (conversation != null) {
@@ -67,6 +85,16 @@ final confirmationDialogItem = CatalogItem(
                 const SizedBox(width: AppConstants.spacingS),
                 ElevatedButton(
                   onPressed: () {
+                    // #region agent log
+                    _debugLogDialog(
+                        'confirmation_dialog:onYes',
+                        'User clicked YES button',
+                        {
+                          'message': message,
+                          'conversationExists': globalGenUiConversation != null,
+                        },
+                        'B');
+                    // #endregion
                     // Send "Yes" response back to GenUI conversation
                     final conversation = globalGenUiConversation;
                     if (conversation != null) {

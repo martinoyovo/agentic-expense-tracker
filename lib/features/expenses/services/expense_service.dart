@@ -6,6 +6,11 @@ class ExpenseService extends ChangeNotifier {
   final List<ExpenseCategory> _categories = [];
   final List<Expense> _expenses = [];
 
+  // Track recent expense additions to prevent duplicates
+  final Map<String, DateTime> _recentExpenseKeys = {};
+  static const _deduplicationWindow = Duration(
+      seconds: 30); // Increased to prevent duplicates from rapid AI calls
+
   List<ExpenseCategory> get categories => List.unmodifiable(_categories);
   List<Expense> get expenses => List.unmodifiable(_expenses);
 
@@ -14,8 +19,16 @@ class ExpenseService extends ChangeNotifier {
     return _expenses.where((e) => e.categoryId == categoryId).toList();
   }
 
-  // Add a new category
+  // Add a new category (with deduplication - won't add if name exists)
   ExpenseCategory addCategory(String name, String colorHex) {
+    // Check if category with same name already exists
+    final existing = findCategoryByName(name);
+    if (existing != null) {
+      debugPrint(
+          '🔍 [DEDUPE] Category "$name" already exists, returning existing');
+      return existing;
+    }
+
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final color = _parseColor(colorHex);
     final category = ExpenseCategory(id: id, name: name, color: color);
@@ -45,17 +58,84 @@ class ExpenseService extends ChangeNotifier {
     }
   }
 
-  // Add a new expense
+  // Add a new expense (with deduplication - returns existing if duplicate)
   Expense addExpense(String title, double amount, String categoryId) {
+    // Normalize the title for better deduplication
+    final normalizedTitle = title.trim().toLowerCase();
+
+    // Create a key for deduplication based on title, amount, and category
+    final dedupeKey =
+        '${normalizedTitle}_${amount.toStringAsFixed(2)}_$categoryId';
+    final now = DateTime.now();
+
+    // Check if this exact expense was added recently
+    if (_recentExpenseKeys.containsKey(dedupeKey)) {
+      final lastAdded = _recentExpenseKeys[dedupeKey]!;
+      if (now.difference(lastAdded) < _deduplicationWindow) {
+        debugPrint(
+            '🔍 [DEDUPE] Skipping duplicate expense: "$title" \$$amount (category: $categoryId)');
+        // Find and return the existing expense
+        final existing = _expenses
+            .where(
+              (e) =>
+                  e.title.trim().toLowerCase() == normalizedTitle &&
+                  e.amount.toStringAsFixed(2) == amount.toStringAsFixed(2) &&
+                  e.categoryId == categoryId,
+            )
+            .lastOrNull;
+
+        if (existing != null) {
+          debugPrint('✅ Returning existing expense: ${existing.id}');
+          return existing;
+        }
+      }
+    }
+
+    // Also check if an expense with the same characteristics already exists in the list
+    // (not just recent additions, but any existing expense)
+    final duplicateExists = _expenses.any(
+      (e) =>
+          e.title.trim().toLowerCase() == normalizedTitle &&
+          e.amount.toStringAsFixed(2) == amount.toStringAsFixed(2) &&
+          e.categoryId == categoryId &&
+          // Only consider it a duplicate if added within the deduplication window
+          now.difference(e.date).abs() < _deduplicationWindow,
+    );
+
+    if (duplicateExists) {
+      debugPrint(
+          '🔍 [DEDUPE] Found existing duplicate expense in list: "$title" \$$amount');
+      final existing = _expenses
+          .where(
+            (e) =>
+                e.title.trim().toLowerCase() == normalizedTitle &&
+                e.amount.toStringAsFixed(2) == amount.toStringAsFixed(2) &&
+                e.categoryId == categoryId &&
+                now.difference(e.date).abs() < _deduplicationWindow,
+          )
+          .last;
+      return existing;
+    }
+
+    // Clean up old keys
+    _recentExpenseKeys.removeWhere(
+      (key, time) => now.difference(time) > _deduplicationWindow,
+    );
+
+    // Record this expense addition
+    _recentExpenseKeys[dedupeKey] = now;
+
     final id = DateTime.now().millisecondsSinceEpoch.toString();
     final expense = Expense(
       id: id,
-      title: title,
+      title: title.trim(), // Trim whitespace
       amount: amount,
       categoryId: categoryId,
       date: DateTime.now(),
     );
     _expenses.add(expense);
+    debugPrint(
+        '✅ Added new expense: "$title" \$$amount (ID: $id, Category: $categoryId)');
     notifyListeners();
     return expense;
   }

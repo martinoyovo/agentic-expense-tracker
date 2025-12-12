@@ -22,11 +22,11 @@ class CategoryColumnWidget extends StatelessWidget {
       width: 280,
       margin: const EdgeInsets.all(AppConstants.spacingS),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withOpacity(0.25), // Increased from 0.1 to 0.25 for better visibility
         borderRadius: BorderRadius.circular(AppConstants.radiusM),
         border: Border.all(
-          color: color.withOpacity(0.3),
-          width: 1,
+          color: color.withOpacity(0.5), // Increased from 0.3 to 0.5 for better definition
+          width: 1.5, // Slightly thicker border
         ),
       ),
       child: Column(
@@ -36,7 +36,7 @@ class CategoryColumnWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(AppConstants.spacingM),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withOpacity(0.35), // Increased from 0.2 to 0.35 for better header visibility
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(AppConstants.radiusM),
                 topRight: Radius.circular(AppConstants.radiusM),

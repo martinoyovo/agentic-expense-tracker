@@ -10,7 +10,7 @@ final chartWidgetItem = CatalogItem(
     properties: {
       'chartType': S.string(description: 'Type of chart to display: "pie", "bar", or "line"'),
       'data': S.list(
-        description: 'Array of data points for the chart',
+      description: 'Array of data points for the chart',
         items: S.object(
           properties: {
             'label': S.string(description: 'Label for the data point'),
@@ -19,8 +19,8 @@ final chartWidgetItem = CatalogItem(
           },
           required: ['label', 'value', 'color'],
         ),
-      ),
-    },
+        ),
+      },
     required: ['chartType', 'data'],
   ),
   widgetBuilder: (context) {

@@ -11,7 +11,7 @@ final categoryColumnItem = CatalogItem(
       'name': S.string(description: 'The name of the category (e.g., "Food & Drink", "Travel")'),
       'color': S.string(description: 'Hex color code (e.g., "#FF5733") or named color (e.g., "purple")'),
       'expenses': S.list(
-        description: 'Array of expense objects in this category',
+      description: 'Array of expense objects in this category',
         items: S.object(
           properties: {
             'id': S.string(description: 'Unique expense ID'),
@@ -21,8 +21,8 @@ final categoryColumnItem = CatalogItem(
           },
           required: ['id', 'title', 'amount', 'date'],
         ),
-      ),
-    },
+    ),
+  },
     required: ['id', 'name', 'color', 'expenses'],
   ),
   widgetBuilder: (context) {

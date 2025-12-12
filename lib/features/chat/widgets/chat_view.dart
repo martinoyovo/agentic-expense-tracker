@@ -11,16 +11,20 @@ enum ChatMode { text, voice }
 /// Custom chat view widget with text and voice modes
 class ChatView extends StatefulWidget {
   final ChatService chatService;
-  
+
   /// Lazy getter for voice services - only called when user enables voice mode
   final LiveChatService Function()? liveChatServiceGetter;
   final AudioService Function()? audioServiceGetter;
+
+  /// Callback when chat mode changes (for parent to update header)
+  final ValueChanged<ChatMode>? onModeChanged;
 
   const ChatView({
     super.key,
     required this.chatService,
     this.liveChatServiceGetter,
     this.audioServiceGetter,
+    this.onModeChanged,
   });
 
   @override
@@ -32,20 +36,14 @@ class _ChatViewState extends State<ChatView> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   ChatMode _currentMode = ChatMode.text;
-  
+
   // Cached voice services - only created when user switches to voice mode
   LiveChatService? _liveChatService;
   AudioService? _audioService;
 
   /// Check if voice mode is available (without triggering initialization)
-  bool get _supportsVoice => 
+  bool get _supportsVoice =>
       widget.liveChatServiceGetter != null && widget.audioServiceGetter != null;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.chatService.addListener(_onMessagesChanged);
-  }
 
   void _onMessagesChanged() {
     setState(() {});
@@ -73,7 +71,7 @@ class _ChatViewState extends State<ChatView> {
   void _sendMessage() {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-    
+
     widget.chatService.sendMessage(text);
     _textController.clear();
     _focusNode.requestFocus();
@@ -85,24 +83,38 @@ class _ChatViewState extends State<ChatView> {
       _liveChatService ??= widget.liveChatServiceGetter!();
       _audioService ??= widget.audioServiceGetter!();
     }
-    
+
     setState(() {
-      _currentMode = _currentMode == ChatMode.text 
-          ? ChatMode.voice 
-          : ChatMode.text;
+      _currentMode =
+          _currentMode == ChatMode.text ? ChatMode.voice : ChatMode.text;
+    });
+
+    // Notify parent of mode change
+    widget.onModeChanged?.call(_currentMode);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.chatService.addListener(_onMessagesChanged);
+    // Notify initial mode
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onModeChanged?.call(_currentMode);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_currentMode == ChatMode.voice && _liveChatService != null && _audioService != null) {
+    if (_currentMode == ChatMode.voice &&
+        _liveChatService != null &&
+        _audioService != null) {
       return VoiceChatWidget(
         liveChatService: _liveChatService!,
         audioService: _audioService!,
         onClose: _toggleMode,
       );
     }
-    
+
     return _buildTextChat();
   }
 
@@ -153,7 +165,7 @@ class _ChatViewState extends State<ChatView> {
                   },
                 ),
         ),
-        
+
         // Typing indicator
         if (isTyping)
           Padding(
@@ -183,7 +195,7 @@ class _ChatViewState extends State<ChatView> {
               ],
             ),
           ),
-        
+
         // Input field
         Container(
           padding: const EdgeInsets.all(AppConstants.spacingM),
@@ -206,12 +218,13 @@ class _ChatViewState extends State<ChatView> {
                     icon: const Icon(Icons.mic),
                     tooltip: 'Switch to voice chat',
                     style: IconButton.styleFrom(
-                      backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                      backgroundColor:
+                          theme.colorScheme.surfaceContainerHighest,
                     ),
                   ),
                 if (_supportsVoice)
                   const SizedBox(width: AppConstants.spacingS),
-                
+
                 Expanded(
                   child: TextField(
                     controller: _textController,
@@ -243,7 +256,8 @@ class _ChatViewState extends State<ChatView> {
                   style: IconButton.styleFrom(
                     backgroundColor: theme.colorScheme.primary,
                     foregroundColor: theme.colorScheme.onPrimary,
-                    disabledBackgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    disabledBackgroundColor:
+                        theme.colorScheme.surfaceContainerHighest,
                   ),
                 ),
               ],
@@ -267,13 +281,15 @@ class _MessageBubble extends StatelessWidget {
     final isUser = message.isUser;
 
     if (message.isLoading) {
-      return const SizedBox.shrink(); // Hide loading messages, we show typing indicator instead
+      return const SizedBox
+          .shrink(); // Hide loading messages, we show typing indicator instead
     }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppConstants.spacingS),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
@@ -343,7 +359,8 @@ class _TypingDot extends StatefulWidget {
   State<_TypingDot> createState() => _TypingDotState();
 }
 
-class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMixin {
+class _TypingDotState extends State<_TypingDot>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -357,7 +374,7 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
     _animation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
-    
+
     Future.delayed(Duration(milliseconds: widget.delay), () {
       if (mounted) {
         _controller.repeat(reverse: true);
@@ -380,7 +397,10 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
           width: 8,
           height: 8,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.outline.withOpacity(0.5 + _animation.value * 0.5),
+            color: Theme.of(context)
+                .colorScheme
+                .outline
+                .withOpacity(0.5 + _animation.value * 0.5),
             shape: BoxShape.circle,
           ),
         );

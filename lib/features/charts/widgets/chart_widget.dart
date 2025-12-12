@@ -68,28 +68,41 @@ class ChartWidget extends StatelessWidget {
       return const Center(child: Text('No data available'));
     }
 
-    return PieChart(
-      PieChartData(
-        sections: data.asMap().entries.map((entry) {
-          final dataPoint = entry.value;
-          final total = data.fold(0.0, (sum, d) => sum + d.value);
-          final percentage = (dataPoint.value / total * 100).toStringAsFixed(1);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate responsive size based on available space
+        final availableSize = constraints.maxWidth < constraints.maxHeight
+            ? constraints.maxWidth
+            : constraints.maxHeight;
+        // Use 70% of available space, with a minimum of 100 and maximum of 150
+        final chartSize = (availableSize * 0.7).clamp(100.0, 150.0);
+        final radius = chartSize / 2;
+        final centerSpaceRadius = radius * 0.3; // 30% of radius for center space
 
-          return PieChartSectionData(
-            value: dataPoint.value,
-            title: '$percentage%',
-            color: dataPoint.color,
-            radius: 100,
-            titleStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          );
-        }).toList(),
-        sectionsSpace: 2,
-        centerSpaceRadius: 40,
-      ),
+        return PieChart(
+          PieChartData(
+            sections: data.asMap().entries.map((entry) {
+              final dataPoint = entry.value;
+              final total = data.fold(0.0, (sum, d) => sum + d.value);
+              final percentage = (dataPoint.value / total * 100).toStringAsFixed(1);
+
+              return PieChartSectionData(
+                value: dataPoint.value,
+                title: '$percentage%',
+                color: dataPoint.color,
+                radius: radius,
+                titleStyle: TextStyle(
+                  fontSize: radius * 0.12, // Responsive font size
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              );
+            }).toList(),
+            sectionsSpace: 2,
+            centerSpaceRadius: centerSpaceRadius,
+          ),
+        );
+      },
     );
   }
 

@@ -21,22 +21,22 @@ class VoiceChatWidget extends StatefulWidget {
   State<VoiceChatWidget> createState() => _VoiceChatWidgetState();
 }
 
-class _VoiceChatWidgetState extends State<VoiceChatWidget> 
+class _VoiceChatWidgetState extends State<VoiceChatWidget>
     with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late AnimationController _waveController;
   late Animation<double> _pulseAnimation;
-  
+
   StreamSubscription? _audioSubscription;
   StreamSubscription? _responseSubscription;
-  
+
   bool _isConnecting = false;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    
+
     // Pulse animation for recording indicator
     _pulseController = AnimationController(
       vsync: this,
@@ -45,27 +45,31 @@ class _VoiceChatWidgetState extends State<VoiceChatWidget>
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     // Wave animation for AI speaking
     _waveController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
     );
-    
+
     // Initialize and connect
     _initialize();
   }
 
   Future<void> _initialize() async {
+    if (!mounted) return;
+
     setState(() {
       _isConnecting = true;
       _errorMessage = null;
     });
-    
+
     try {
       // Initialize audio service
       await widget.audioService.initialize();
-      
+
+      if (!mounted) return;
+
       // Connect to Gemini Live API
       await widget.liveChatService.connect(
         systemInstruction: '''
@@ -74,39 +78,50 @@ Be concise and conversational. When users mention expenses, help them track and 
 Keep responses brief since this is voice interaction.
 ''',
       );
-      
+
+      if (!mounted) return;
+
       // Listen for audio responses from AI
       _responseSubscription = widget.liveChatService.audioResponseStream.listen(
         (audioData) {
-          widget.audioService.playAudio(audioData);
+          debugPrint(
+              '🎧 Voice widget received audio: ${audioData.length} bytes');
+          if (mounted) {
+            widget.audioService.playAudio(audioData);
+          } else {
+            debugPrint('⚠️ Widget not mounted, skipping playback');
+          }
+        },
+        onError: (error) {
+          debugPrint('❌ Audio response stream error: $error');
         },
       );
-      
-      // Listen for recorded audio to send to AI
-      _audioSubscription = widget.audioService.audioStream.listen(
-        (audioData) {
-          widget.liveChatService.sendAudio(audioData);
-        },
-      );
-      
+
+      // Note: Audio stream will be started when recording begins
+      // This is done in _toggleRecording() to ensure proper timing
+
+      if (!mounted) return;
       setState(() {
         _isConnecting = false;
       });
-      
     } catch (e) {
+      if (!mounted) return;
+
       String errorMsg = e.toString();
-      
+
       // Provide user-friendly error messages
-      if (errorMsg.contains('not found') || errorMsg.contains('not supported')) {
+      if (errorMsg.contains('not found') ||
+          errorMsg.contains('not supported')) {
         errorMsg = 'Voice chat is not available in your region.\n\n'
             'The Gemini Live API requires a specific Firebase project configuration.';
-      } else if (errorMsg.contains('WebSocket') || errorMsg.contains('Connection')) {
+      } else if (errorMsg.contains('WebSocket') ||
+          errorMsg.contains('Connection')) {
         errorMsg = 'Unable to connect to voice service.\n\n'
             'Please check your internet connection and try again.';
       } else {
         errorMsg = 'Failed to start voice chat.\n\n$errorMsg';
       }
-      
+
       setState(() {
         _isConnecting = false;
         _errorMessage = errorMsg;
@@ -115,25 +130,62 @@ Keep responses brief since this is voice interaction.
   }
 
   void _toggleRecording() async {
+    if (!mounted) return;
+
     if (widget.audioService.isRecording) {
       await widget.audioService.stopRecording();
       await widget.liveChatService.endAudioInput();
       _pulseController.stop();
+      // Cancel audio subscription when stopping
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
     } else {
       // Stop any playing audio first
       await widget.audioService.stopPlaying();
+
+      if (!mounted) return;
+
+      // Start audio stream before recording
+      widget.liveChatService.startAudioStream(widget.audioService.audioStream);
+
+      // Start recording
       await widget.audioService.startRecording();
+
+      if (!mounted) return;
       _pulseController.repeat(reverse: true);
     }
-    setState(() {});
+
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    // Stop animations first
+    _pulseController.stop();
+    _waveController.stop();
+
+    // Cancel all subscriptions
+    _audioSubscription?.cancel();
+    _audioSubscription = null;
+    _responseSubscription?.cancel();
+    _responseSubscription = null;
+
+    // Stop recording if active
+    if (widget.audioService.isRecording) {
+      widget.audioService.stopRecording();
+    }
+
+    // Stop playing audio if active
+    if (widget.audioService.isPlaying) {
+      widget.audioService.stopPlaying();
+    }
+
+    // Dispose controllers
     _pulseController.dispose();
     _waveController.dispose();
-    _audioSubscription?.cancel();
-    _responseSubscription?.cancel();
+
     super.dispose();
   }
 
@@ -145,7 +197,7 @@ Keep responses brief since this is voice interaction.
     final isSpeaking = widget.liveChatService.isSpeaking;
     final isProcessing = widget.liveChatService.isProcessing;
     final isConnected = widget.liveChatService.isConnected;
-    
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -160,14 +212,12 @@ Keep responses brief since this is voice interaction.
       child: SafeArea(
         child: Column(
           children: [
-            // Header
-            _buildHeader(theme),
-            
-            // Main content
+            // Main content (header is now in parent FloatingChatWidget)
             Expanded(
-              child: _buildContent(theme, isConnected, isRecording, isSpeaking, isProcessing),
+              child: _buildContent(
+                  theme, isConnected, isRecording, isSpeaking, isProcessing),
             ),
-            
+
             // Controls
             _buildControls(theme, isConnected, isRecording, isPlaying),
           ],
@@ -176,63 +226,10 @@ Keep responses brief since this is voice interaction.
     );
   }
 
-  Widget _buildHeader(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(AppConstants.spacingM),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.mic,
-              color: theme.colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: AppConstants.spacingM),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Voice Chat',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  widget.liveChatService.isConnected 
-                      ? 'Connected • ${widget.liveChatService.selectedVoice.name}'
-                      : 'Connecting...',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (widget.onClose != null)
-            IconButton(
-              onPressed: () async {
-                await widget.audioService.stopRecording();
-                await widget.liveChatService.disconnect();
-                widget.onClose!();
-              },
-              icon: const Icon(Icons.close),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent(
-    ThemeData theme, 
-    bool isConnected, 
-    bool isRecording, 
+    ThemeData theme,
+    bool isConnected,
+    bool isRecording,
     bool isSpeaking,
     bool isProcessing,
   ) {
@@ -252,7 +249,7 @@ Keep responses brief since this is voice interaction.
         ),
       );
     }
-    
+
     if (_errorMessage != null) {
       return SingleChildScrollView(
         padding: const EdgeInsets.all(AppConstants.spacingL),
@@ -282,7 +279,7 @@ Keep responses brief since this is voice interaction.
         ),
       );
     }
-    
+
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppConstants.spacingM),
@@ -292,14 +289,14 @@ Keep responses brief since this is voice interaction.
           children: [
             // Animated orb
             _buildAnimatedOrb(theme, isRecording, isSpeaking, isProcessing),
-            
+
             const SizedBox(height: AppConstants.spacingL),
-            
+
             // Status text
             _buildStatusText(theme, isRecording, isSpeaking, isProcessing),
-            
+
             const SizedBox(height: AppConstants.spacingM),
-            
+
             // Transcripts
             _buildTranscripts(theme),
           ],
@@ -309,8 +306,8 @@ Keep responses brief since this is voice interaction.
   }
 
   Widget _buildAnimatedOrb(
-    ThemeData theme, 
-    bool isRecording, 
+    ThemeData theme,
+    bool isRecording,
     bool isSpeaking,
     bool isProcessing,
   ) {
@@ -324,12 +321,12 @@ Keep responses brief since this is voice interaction.
     } else {
       orbColor = theme.colorScheme.outline;
     }
-    
+
     return AnimatedBuilder(
       animation: _pulseAnimation,
       builder: (context, child) {
         final scale = isRecording ? _pulseAnimation.value : 1.0;
-        
+
         return Transform.scale(
           scale: scale,
           child: Container(
@@ -361,10 +358,10 @@ Keep responses brief since this is voice interaction.
                   color: orbColor,
                 ),
                 child: Icon(
-                  isRecording 
-                      ? Icons.mic 
-                      : isSpeaking 
-                          ? Icons.volume_up 
+                  isRecording
+                      ? Icons.mic
+                      : isSpeaking
+                          ? Icons.volume_up
                           : isProcessing
                               ? Icons.hourglass_empty
                               : Icons.mic_none,
@@ -380,8 +377,8 @@ Keep responses brief since this is voice interaction.
   }
 
   Widget _buildStatusText(
-    ThemeData theme, 
-    bool isRecording, 
+    ThemeData theme,
+    bool isRecording,
     bool isSpeaking,
     bool isProcessing,
   ) {
@@ -395,7 +392,7 @@ Keep responses brief since this is voice interaction.
     } else {
       statusText = 'Tap the button to speak';
     }
-    
+
     return Text(
       statusText,
       style: theme.textTheme.titleMedium?.copyWith(
@@ -407,11 +404,11 @@ Keep responses brief since this is voice interaction.
   Widget _buildTranscripts(ThemeData theme) {
     final userTranscript = widget.liveChatService.currentTranscript;
     final aiTranscript = widget.liveChatService.aiTranscript;
-    
+
     if (userTranscript == null && aiTranscript == null) {
       return const SizedBox.shrink();
     }
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppConstants.spacingL),
       padding: const EdgeInsets.all(AppConstants.spacingM),
@@ -471,66 +468,59 @@ Keep responses brief since this is voice interaction.
   }
 
   Widget _buildControls(
-    ThemeData theme, 
-    bool isConnected, 
+    ThemeData theme,
+    bool isConnected,
     bool isRecording,
     bool isPlaying,
   ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppConstants.spacingL,
-        vertical: AppConstants.spacingM,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Main recording button
-          GestureDetector(
-            onTap: isConnected ? _toggleRecording : null,
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isRecording 
-                    ? theme.colorScheme.error 
-                    : theme.colorScheme.primary,
-                boxShadow: [
-                  BoxShadow(
-                    color: (isRecording 
-                        ? theme.colorScheme.error 
-                        : theme.colorScheme.primary).withOpacity(0.3),
-                    blurRadius: 15,
-                    spreadRadius: 3,
-                  ),
-                ],
-              ),
-              child: Icon(
-                isRecording ? Icons.stop : Icons.mic,
-                size: 28,
-                color: Colors.white,
-              ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Main recording button
+        GestureDetector(
+          onTap: isConnected ? _toggleRecording : null,
+          child: Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isRecording
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.primary,
+              boxShadow: [
+                BoxShadow(
+                  color: (isRecording
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.primary)
+                      .withOpacity(0.3),
+                  blurRadius: 15,
+                  spreadRadius: 3,
+                ),
+              ],
+            ),
+            child: Icon(
+              isRecording ? Icons.stop : Icons.mic,
+              size: 28,
+              color: Colors.white,
             ),
           ),
-          
-          const SizedBox(height: AppConstants.spacingS),
-          
-          // Hint text
-          Text(
-            isRecording 
-                ? 'Tap to stop' 
-                : 'Tap to speak',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
+        ),
+
+        const SizedBox(height: AppConstants.spacingS),
+
+        // Hint text
+        Text(
+          isRecording ? 'Tap to stop' : 'Tap to speak',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.outline,
           ),
-          
-          const SizedBox(height: AppConstants.spacingS),
-          
-          // Voice selector
-          _buildVoiceSelector(theme),
-        ],
-      ),
+        ),
+
+        const SizedBox(height: AppConstants.spacingS),
+
+        // Voice selector
+        _buildVoiceSelector(theme),
+      ],
     );
   }
 
@@ -556,10 +546,10 @@ Keep responses brief since this is voice interaction.
               child: Text(voice.name),
             );
           }).toList(),
-          onChanged: widget.liveChatService.isConnected 
+          onChanged: widget.liveChatService.isConnected
               ? null // Can't change voice while connected
               : (voice) {
-                  if (voice != null) {
+                  if (voice != null && mounted) {
                     widget.liveChatService.setVoice(voice);
                     setState(() {});
                   }
@@ -569,4 +559,3 @@ Keep responses brief since this is voice interaction.
     );
   }
 }
-

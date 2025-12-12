@@ -56,3 +56,6 @@ GoogleService-Info.plist
 .env.*.local
 
 /.doc
+
+.claude
+.cursor

@@ -14,12 +14,17 @@ class TotalWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final currencyFormat =
+        NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppConstants.spacingL),
+        padding: EdgeInsets.all(
+          isMobile ? AppConstants.spacingM : AppConstants.spacingL,
+        ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -30,12 +35,16 @@ class TotalWidget extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: AppConstants.spacingS),
-            Text(
-              currencyFormat.format(amount),
-              style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                currencyFormat.format(amount),
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+              ),
             ),
             const SizedBox(height: AppConstants.spacingS),
             Text(
@@ -43,6 +52,8 @@ class TotalWidget extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     color: Colors.grey[600],
                   ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

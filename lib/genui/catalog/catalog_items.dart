@@ -1,5 +1,6 @@
 import 'package:genui/genui.dart';
 import 'category_column_item.dart';
+import 'categories_container_item.dart';
 import 'expense_card_item.dart';
 import 'chart_widget_item.dart';
 import 'total_widget_item.dart';
@@ -10,6 +11,7 @@ import 'background_image_item.dart';
 Catalog createCatalog() {
   return Catalog([
     categoryColumnItem,
+    categoriesContainerItem,
     expenseCardItem,
     chartWidgetItem,
     totalWidgetItem,

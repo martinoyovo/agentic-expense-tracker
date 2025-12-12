@@ -10,10 +10,10 @@ import '../genui/surfaces/surface_manager.dart';
 class HomeScreen extends StatefulWidget {
   final SurfaceManager surfaceManager;
   final ChatService chatService;
-  
+
   /// Lazy getter for LiveChatService - only instantiated when accessed
   final LiveChatService Function()? liveChatServiceGetter;
-  
+
   /// Lazy getter for AudioService - only instantiated when accessed
   final AudioService Function()? audioServiceGetter;
 
@@ -35,26 +35,37 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: ResponsiveHelper.isMobile(context)
+          ? AppBar(
+              title: const Text('AI Expense Tracker'),
+              centerTitle: true,
+              elevation: 0,
+            )
+          : null,
       body: Stack(
         children: [
-          // Background layer
-          ListenableBuilder(
-            listenable: widget.surfaceManager,
-            builder: (context, _) {
-              return widget.surfaceManager.backgroundWidget ??
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Theme.of(context).colorScheme.primaryContainer,
-                          Theme.of(context).colorScheme.secondaryContainer,
-                        ],
+          // Background layer - fills entire screen
+          Positioned.fill(
+            child: ListenableBuilder(
+              listenable: widget.surfaceManager,
+              builder: (context, _) {
+                return widget.surfaceManager.backgroundWidget ??
+                    Container(
+                      width: double.infinity,
+                      height: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Theme.of(context).colorScheme.primaryContainer,
+                            Theme.of(context).colorScheme.secondaryContainer,
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-            },
+                    );
+              },
+            ),
           ),
 
           // Content layer
@@ -73,13 +84,11 @@ class _HomeScreenState extends State<HomeScreen> {
               listenable: widget.surfaceManager,
               builder: (context, _) {
                 if (ResponsiveHelper.isMobile(context)) {
-                  // Mobile: Modal barrier + bottom sheet
+                  // Mobile: Modal barrier + bottom sheet (no tap-to-dismiss)
                   return GestureDetector(
+                    // Prevent tap-to-dismiss - only close button can close
                     onTap: () {
-                      // Don't close if there's a dialog showing
-                      if (widget.surfaceManager.dialogWidget == null) {
-                        setState(() => _isChatOpen = false);
-                      }
+                      // Do nothing - prevent dismissal on tap outside
                     },
                     child: Container(
                       color: Colors.black.withOpacity(0.5),
@@ -118,7 +127,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: ConstrainedBox(
                             constraints: BoxConstraints(
                               maxWidth: 400,
-                              maxHeight: MediaQuery.of(context).size.height * 0.8,
+                              maxHeight:
+                                  MediaQuery.of(context).size.height * 0.8,
                             ),
                             child: widget.surfaceManager.dialogWidget,
                           ),
@@ -159,49 +169,50 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildDesktopLayout() {
+    final hasChartOrTotal = widget.surfaceManager.chartWidget != null ||
+        widget.surfaceManager.totalWidget != null;
+    final hasCategories = widget.surfaceManager.categoryWidgets.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.all(AppConstants.spacingL),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: Chart and Total side by side
-          SizedBox(
-            height: 300,
-            child: Row(
-              children: [
-                // Chart
-                if (widget.surfaceManager.chartWidget != null)
-                  Expanded(
-                    flex: 2,
-                    child: widget.surfaceManager.chartWidget!,
-                  ),
-                if (widget.surfaceManager.chartWidget != null &&
-                    widget.surfaceManager.totalWidget != null)
-                  const SizedBox(width: AppConstants.spacingL),
-                // Total
-                if (widget.surfaceManager.totalWidget != null)
-                  Expanded(
-                    flex: 1,
-                    child: widget.surfaceManager.totalWidget!,
-                  ),
-              ],
-            ),
-          ),
-
-          if (widget.surfaceManager.chartWidget != null ||
-              widget.surfaceManager.totalWidget != null)
-            const SizedBox(height: AppConstants.spacingL),
-
-          // Categories in horizontal scrollable row
-          Expanded(
-            child: widget.surfaceManager.categoryWidgets.isEmpty
-                ? _buildEmptyState()
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: widget.surfaceManager.categoryWidgets,
+          // Top row: Chart and Total side by side (only if they exist)
+          if (hasChartOrTotal) ...[
+            SizedBox(
+              height: 300,
+              child: Row(
+                children: [
+                  // Chart
+                  if (widget.surfaceManager.chartWidget != null)
+                    Expanded(
+                      flex: 2,
+                      child: widget.surfaceManager.chartWidget!,
                     ),
-                  ),
+                  if (widget.surfaceManager.chartWidget != null &&
+                      widget.surfaceManager.totalWidget != null)
+                    const SizedBox(width: AppConstants.spacingL),
+                  // Total
+                  if (widget.surfaceManager.totalWidget != null)
+                    Expanded(
+                      flex: 1,
+                      child: widget.surfaceManager.totalWidget!,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppConstants.spacingL),
+          ],
+
+          // Categories container - starts at top if no chart/total, otherwise below them
+          Expanded(
+            child: hasCategories
+                ? Align(
+                    alignment: Alignment.topLeft,
+                    child: widget.surfaceManager.categoryWidgets.first,
+                  )
+                : _buildEmptyState(),
           ),
 
           // Chat button if not open
@@ -223,45 +234,46 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildTabletLayout() {
+    final hasChartOrTotal = widget.surfaceManager.chartWidget != null ||
+        widget.surfaceManager.totalWidget != null;
+    final hasCategories = widget.surfaceManager.categoryWidgets.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.all(AppConstants.spacingM),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: Chart and Total side by side (smaller)
-          SizedBox(
-            height: 250,
-            child: Row(
-              children: [
-                if (widget.surfaceManager.chartWidget != null)
-                  Expanded(
-                    child: widget.surfaceManager.chartWidget!,
-                  ),
-                if (widget.surfaceManager.chartWidget != null &&
-                    widget.surfaceManager.totalWidget != null)
-                  const SizedBox(width: AppConstants.spacingM),
-                if (widget.surfaceManager.totalWidget != null)
-                  Expanded(
-                    child: widget.surfaceManager.totalWidget!,
-                  ),
-              ],
-            ),
-          ),
-
-          if (widget.surfaceManager.chartWidget != null ||
-              widget.surfaceManager.totalWidget != null)
-            const SizedBox(height: AppConstants.spacingM),
-
-          // Categories: 2 columns visible, horizontal scroll
-          Expanded(
-            child: widget.surfaceManager.categoryWidgets.isEmpty
-                ? _buildEmptyState()
-                : SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: widget.surfaceManager.categoryWidgets,
+          // Top row: Chart and Total side by side (only if they exist)
+          if (hasChartOrTotal) ...[
+            SizedBox(
+              height: 250,
+              child: Row(
+                children: [
+                  if (widget.surfaceManager.chartWidget != null)
+                    Expanded(
+                      child: widget.surfaceManager.chartWidget!,
                     ),
-                  ),
+                  if (widget.surfaceManager.chartWidget != null &&
+                      widget.surfaceManager.totalWidget != null)
+                    const SizedBox(width: AppConstants.spacingM),
+                  if (widget.surfaceManager.totalWidget != null)
+                    Expanded(
+                      child: widget.surfaceManager.totalWidget!,
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppConstants.spacingM),
+          ],
+
+          // Categories container - starts at top if no chart/total, otherwise below them
+          Expanded(
+            child: hasCategories
+                ? Align(
+                    alignment: Alignment.topLeft,
+                    child: widget.surfaceManager.categoryWidgets.first,
+                  )
+                : _buildEmptyState(),
           ),
 
           // Chat button if not open
@@ -282,69 +294,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMobileLayout() {
-    return Column(
-      children: [
-        // Stacked vertically
-        if (widget.surfaceManager.chartWidget != null)
-          SizedBox(
-            height: 250,
-            child: Padding(
-              padding: const EdgeInsets.all(AppConstants.spacingM),
-              child: widget.surfaceManager.chartWidget,
-            ),
-          ),
+    final hasChartOrTotal = widget.surfaceManager.chartWidget != null ||
+        widget.surfaceManager.totalWidget != null;
+    final hasCategories = widget.surfaceManager.categoryWidgets.isNotEmpty;
 
-        if (widget.surfaceManager.totalWidget != null)
-          SizedBox(
-            height: 150,
-            child: Padding(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Stacked vertically (only if they exist)
+        if (hasChartOrTotal) ...[
+          if (widget.surfaceManager.chartWidget != null)
+            SizedBox(
+              height: 250,
+              child: Padding(
+                padding: const EdgeInsets.all(AppConstants.spacingM),
+                child: widget.surfaceManager.chartWidget,
+              ),
+            ),
+          if (widget.surfaceManager.totalWidget != null)
+            Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppConstants.spacingM,
+                vertical: AppConstants.spacingS,
               ),
-              child: widget.surfaceManager.totalWidget,
+              child: SizedBox(
+                width: double.infinity,
+                child: widget.surfaceManager.totalWidget,
+              ),
             ),
-          ),
+          if (hasChartOrTotal) const SizedBox(height: AppConstants.spacingS),
+        ],
 
-        if (widget.surfaceManager.chartWidget != null ||
-            widget.surfaceManager.totalWidget != null)
-          const SizedBox(height: AppConstants.spacingM),
-
-        // Categories: 1 column visible, horizontal scroll with page snap
+        // Categories container - starts at top if no chart/total, otherwise below them
         Expanded(
-          child: widget.surfaceManager.categoryWidgets.isEmpty
-              ? _buildEmptyState()
-              : PageView.builder(
-                  itemCount: widget.surfaceManager.categoryWidgets.length,
-                  controller: PageController(viewportFraction: 0.9),
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppConstants.spacingS,
-                      ),
-                      child: widget.surfaceManager.categoryWidgets[index],
-                    );
-                  },
-                ),
+          child: hasCategories
+              ? Padding(
+                  padding: EdgeInsets.only(
+                    top: hasChartOrTotal
+                        ? AppConstants.spacingS
+                        : AppConstants.spacingM,
+                    left: AppConstants.spacingM,
+                    right: AppConstants.spacingM,
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: widget.surfaceManager.categoryWidgets.first,
+                  ),
+                )
+              : _buildEmptyState(),
         ),
-
-        // Page indicator
-        if (widget.surfaceManager.categoryWidgets.length > 1)
-          Padding(
-            padding: const EdgeInsets.all(AppConstants.spacingM),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.swipe, size: 16, color: Colors.grey),
-                const SizedBox(width: AppConstants.spacingS),
-                Text(
-                  'Swipe for more categories',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey,
-                      ),
-                ),
-              ],
-            ),
-          ),
       ],
     );
   }

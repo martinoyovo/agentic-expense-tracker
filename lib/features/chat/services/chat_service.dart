@@ -2,6 +2,13 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:genui/genui.dart' as genui;
 
+// #region agent log
+void _debugLogChat(String location, String message, Map<String, dynamic> data,
+    String hypothesisId) {
+  debugPrint('🔍 [$hypothesisId] $location: $message | $data');
+}
+// #endregion
+
 /// Represents a single chat message
 class ChatMessage {
   final String id;
@@ -49,20 +56,35 @@ class ChatService extends ChangeNotifier {
   /// Initialize with GenUI conversation
   void initialize(genui.GenUiConversation conversation) {
     _conversation = conversation;
-    
+
     // Listen to text responses
-    _textResponseSubscription = conversation.contentGenerator.textResponseStream.listen((text) {
+    _textResponseSubscription =
+        conversation.contentGenerator.textResponseStream.listen((text) {
+      // #region agent log
+      _debugLogChat(
+          'chat_service:textResponseStream',
+          'AI text response received',
+          {
+            'textLength': text.length,
+            'textPreview':
+                text.length > 100 ? '${text.substring(0, 100)}...' : text,
+            'messagesCount': _messages.length,
+          },
+          'C');
+      // #endregion
       _handleAIResponse(text);
     });
-    
+
     // Listen to errors
-    _errorSubscription = conversation.contentGenerator.errorStream.listen((error) {
+    _errorSubscription =
+        conversation.contentGenerator.errorStream.listen((error) {
       _handleError(error);
     });
-    
+
     // Listen to processing state
-    conversation.contentGenerator.isProcessing.addListener(_onProcessingChanged);
-    
+    conversation.contentGenerator.isProcessing
+        .addListener(_onProcessingChanged);
+
     // Add welcome message
     addAIMessage(
       'Hi! I\'m your expense tracking assistant. I can help you:\n'
@@ -76,7 +98,8 @@ class ChatService extends ChangeNotifier {
   }
 
   void _onProcessingChanged() {
-    final isProcessing = _conversation?.contentGenerator.isProcessing.value ?? false;
+    final isProcessing =
+        _conversation?.contentGenerator.isProcessing.value ?? false;
     if (_isTyping != isProcessing) {
       _isTyping = isProcessing;
       notifyListeners();
@@ -94,18 +117,18 @@ class ChatService extends ChangeNotifier {
   void _handleError(genui.ContentGeneratorError error) {
     // Remove loading message
     _messages.removeWhere((m) => m.isLoading && !m.isUser);
-    
+
     final errorStr = error.error.toString();
     String userMessage;
-    
-    if (errorStr.contains('Operation not permitted') || 
+
+    if (errorStr.contains('Operation not permitted') ||
         errorStr.contains('Connection failed') ||
         errorStr.contains('SocketException')) {
       userMessage = 'Unable to connect. Please check your network connection.';
     } else {
       userMessage = 'Sorry, something went wrong. Please try again.';
     }
-    
+
     addAIMessage(userMessage);
     _isTyping = false;
     notifyListeners();
@@ -115,9 +138,20 @@ class ChatService extends ChangeNotifier {
   Future<void> sendMessage(String text) async {
     if (text.trim().isEmpty || _conversation == null) return;
 
+    // #region agent log
+    _debugLogChat(
+        'chat_service:sendMessage',
+        'User sending message',
+        {
+          'text': text,
+          'messagesCountBefore': _messages.length,
+        },
+        'C');
+    // #endregion
+
     // Add user message
     addUserMessage(text);
-    
+
     // Add loading indicator
     final loadingMessage = ChatMessage(
       id: 'loading_${DateTime.now().millisecondsSinceEpoch}',
@@ -138,7 +172,8 @@ class ChatService extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error sending message: $e');
       _messages.removeWhere((m) => m.isLoading);
-      addAIMessage('Sorry, I couldn\'t process your request. Please try again.');
+      addAIMessage(
+          'Sorry, I couldn\'t process your request. Please try again.');
       _isTyping = false;
       notifyListeners();
     }
@@ -181,7 +216,8 @@ class ChatService extends ChangeNotifier {
   void dispose() {
     _textResponseSubscription?.cancel();
     _errorSubscription?.cancel();
-    _conversation?.contentGenerator.isProcessing.removeListener(_onProcessingChanged);
+    _conversation?.contentGenerator.isProcessing
+        .removeListener(_onProcessingChanged);
     super.dispose();
   }
 }
